@@ -4,7 +4,7 @@
 <style>body{font:16px system-ui;background:#f5f6fb;color:#20243a;margin:0;padding:24px}main{max-width:720px;margin:auto}section{background:white;border-radius:18px;padding:22px;margin:18px 0;box-shadow:0 5px 24px #20243a12}input,button{box-sizing:border-box;font:inherit;padding:12px;border-radius:10px;border:1px solid #bbc3d7}input{width:100%;margin:8px 0}button{background:#5043a7;color:white;cursor:pointer;border:0;margin-top:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere}small{color:#667}#result{overflow-wrap:anywhere}a{color:#5043a7}</style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script></head>
 <body><main><h1>ProfiProfit · Тест доступа</h1><p>Изолированная тестовая страница. Не рабочий сайт и не полный интерфейс ProfiProfit.</p>
-<section id="teacher"><h2>Преподаватель</h2><p>Войдите в существующий аккаунт ProfiProfit для создания тестовой ссылки.</p><input id="email" type="email" placeholder="Email преподавателя"><input id="password" type="password" placeholder="Пароль"><div id="turnstile" style="margin:12px 0"></div><button id="login">Войти</button> <button id="logout">Выйти</button><p id="authstatus"></p><label>UUID ученика Test<input id="studentId" value="8614c262-2c0f-445b-b13f-c4aef4cc84f5"></label><button id="issue">Создать защищённую ссылку</button><p id="result"></p></section>
+<section id="teacher"><h2>Преподаватель</h2><p>Войдите в существующий аккаунт ProfiProfit для создания тестовой ссылки.</p><input id="email" type="email" placeholder="Email преподавателя"><input id="password" type="password" placeholder="Пароль"><p id="captcha-status" role="status">Загружаем проверку Cloudflare…</p><div id="turnstile" style="margin:12px 0;min-height:70px"></div><button id="login">Войти</button> <button id="logout">Выйти</button><p id="authstatus"></p><label>UUID ученика Test<input id="studentId" value="8614c262-2c0f-445b-b13f-c4aef4cc84f5"></label><button id="issue">Создать защищённую ссылку</button><p id="result"></p></section>
 <section id="student" hidden><h2>Кабинет ученика</h2><p id="studentstatus">Загрузка...</p><div id="studentdata"></div></section>
 <section><small>Используется рабочий проект Supabase. Создание токена добавляет запись в student_portal_access; не изменяет уроки или платежи. Не отправляйте ссылку посторонним.</small></section>
 </main><script>
@@ -12,7 +12,23 @@ const client=supabase.createClient('https://dmasuczggcxzrxasgoov.supabase.co','s
 const $=id=>document.getElementById(id);
 const token=new URLSearchParams(location.search).get('access');
 let captchaToken='';
-function mountCaptcha(){if(!window.turnstile){setTimeout(mountCaptcha,200);return}window.turnstile.render('#turnstile',{sitekey:'0x4AAAAAAFWyPC9oBP3FKPXq',callback:value=>{captchaToken=value},'expired-callback':()=>{captchaToken=''},'error-callback':()=>{captchaToken='';message('authstatus','Ошибка CAPTCHA. Проверьте разрешённые домены в Cloudflare Turnstile.')}})}
+let captchaWait=0;
+function mountCaptcha(){
+ if(!window.turnstile){
+   if(++captchaWait>30){message('captcha-status','Cloudflare не загрузился. Отключите блокировщик рекламы/защиту браузера для этого сайта и обновите страницу.');return}
+   setTimeout(mountCaptcha,300);return;
+ }
+ try{
+  window.turnstile.render('#turnstile',{
+   sitekey:'0x4AAAAAAFWyPC9oBP3FKPXq',
+   appearance:'always',
+   callback:value=>{captchaToken=value;message('captcha-status','Проверка пройдена ✓')},
+   'expired-callback':()=>{captchaToken='';message('captcha-status','Проверка истекла. Пройдите её снова.')},
+   'error-callback':code=>{captchaToken='';message('captcha-status','Ошибка Cloudflare ('+code+'). Проверьте разрешённый домен ttsnmrz-cmd.github.io и блокировку скриптов.')}
+  });
+  message('captcha-status','Ожидаем проверку Cloudflare. Если виджета нет, проверьте настройки браузера.');
+ }catch(e){message('captcha-status','Не удалось показать CAPTCHA: '+e.message)}
+}
 function message(id,value){$(id).textContent=value}
 async function session(){const {data}=await client.auth.getUser();message('authstatus',data.user?'Вы вошли как '+data.user.email:'Вы не вошли в аккаунт')}
 $('login').onclick=async()=>{if(!captchaToken){message('authstatus','Сначала пройдите проверку CAPTCHA.');return}const {error}=await client.auth.signInWithPassword({email:$('email').value,password:$('password').value,options:{captchaToken}});captchaToken='';window.turnstile?.reset();message('authstatus',error?error.message:'Вход выполнен');if(!error)session()};
