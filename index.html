@@ -14,8 +14,8 @@ const token=new URLSearchParams(location.search).get('access');
 let captchaToken='';
 let captchaWait=0;
 function mountCaptcha(){
- if(!window.turnstile){
-   if(++captchaWait>30){message('captcha-status','Cloudflare не загрузился. Отключите блокировщик рекламы/защиту браузера для этого сайта и обновите страницу.');return}
+ if(typeof window.turnstile?.render !== "function"){
+   if(++captchaWait>40){message('captcha-status','Cloudflare Turnstile не загрузился полностью. Разрешите challenges.cloudflare.com в блокировщике и обновите страницу.');return}
    setTimeout(mountCaptcha,300);return;
  }
  try{
