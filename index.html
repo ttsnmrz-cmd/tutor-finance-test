@@ -2,20 +2,22 @@
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ProfiProfit — тест защищённого кабинета</title>
 <style>body{font:16px system-ui;background:#f5f6fb;color:#20243a;margin:0;padding:24px}main{max-width:720px;margin:auto}section{background:white;border-radius:18px;padding:22px;margin:18px 0;box-shadow:0 5px 24px #20243a12}input,button{box-sizing:border-box;font:inherit;padding:12px;border-radius:10px;border:1px solid #bbc3d7}input{width:100%;margin:8px 0}button{background:#5043a7;color:white;cursor:pointer;border:0;margin-top:8px}pre{white-space:pre-wrap;overflow-wrap:anywhere}small{color:#667}#result{overflow-wrap:anywhere}a{color:#5043a7}</style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script></head>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script></head>
 <body><main><h1>ProfiProfit · Тест доступа</h1><p>Изолированная тестовая страница. Не рабочий сайт и не полный интерфейс ProfiProfit.</p>
-<section id="teacher"><h2>Преподаватель</h2><p>Войдите в существующий аккаунт ProfiProfit для создания тестовой ссылки.</p><input id="email" type="email" placeholder="Email преподавателя"><input id="password" type="password" placeholder="Пароль"><button id="login">Войти</button> <button id="logout">Выйти</button><p id="authstatus"></p><label>UUID ученика Test<input id="studentId" value="8614c262-2c0f-445b-b13f-c4aef4cc84f5"></label><button id="issue">Создать защищённую ссылку</button><p id="result"></p></section>
+<section id="teacher"><h2>Преподаватель</h2><p>Войдите в существующий аккаунт ProfiProfit для создания тестовой ссылки.</p><input id="email" type="email" placeholder="Email преподавателя"><input id="password" type="password" placeholder="Пароль"><div id="turnstile" style="margin:12px 0"></div><button id="login">Войти</button> <button id="logout">Выйти</button><p id="authstatus"></p><label>UUID ученика Test<input id="studentId" value="8614c262-2c0f-445b-b13f-c4aef4cc84f5"></label><button id="issue">Создать защищённую ссылку</button><p id="result"></p></section>
 <section id="student" hidden><h2>Кабинет ученика</h2><p id="studentstatus">Загрузка...</p><div id="studentdata"></div></section>
 <section><small>Используется рабочий проект Supabase. Создание токена добавляет запись в student_portal_access; не изменяет уроки или платежи. Не отправляйте ссылку посторонним.</small></section>
 </main><script>
 const client=supabase.createClient('https://dmasuczggcxzrxasgoov.supabase.co','sb_publishable_nXL_z4-dtwKcGXmMAXgJSg_v1Op_W1q');
 const $=id=>document.getElementById(id);
 const token=new URLSearchParams(location.search).get('access');
+let captchaToken='';
+function mountCaptcha(){if(!window.turnstile){setTimeout(mountCaptcha,200);return}window.turnstile.render('#turnstile',{sitekey:'0x4AAAAAAFWyPC9oBP3FKPXq',callback:value=>{captchaToken=value},'expired-callback':()=>{captchaToken=''},'error-callback':()=>{captchaToken='';message('authstatus','Ошибка CAPTCHA. Проверьте разрешённые домены в Cloudflare Turnstile.')}})}
 function message(id,value){$(id).textContent=value}
 async function session(){const {data}=await client.auth.getUser();message('authstatus',data.user?'Вы вошли как '+data.user.email:'Вы не вошли в аккаунт')}
-$('login').onclick=async()=>{const {error}=await client.auth.signInWithPassword({email:$('email').value,password:$('password').value});message('authstatus',error?error.message:'Вход выполнен');if(!error)session()};
+$('login').onclick=async()=>{if(!captchaToken){message('authstatus','Сначала пройдите проверку CAPTCHA.');return}const {error}=await client.auth.signInWithPassword({email:$('email').value,password:$('password').value,options:{captchaToken}});captchaToken='';window.turnstile?.reset();message('authstatus',error?error.message:'Вход выполнен');if(!error)session()};
 $('logout').onclick=async()=>{await client.auth.signOut();session()};
 $('issue').onclick=async()=>{message('result','Создание...');const {data,error}=await client.rpc('issue_student_portal_token',{p_student_id:$('studentId').value,p_rotate:false});if(error){message('result','Ошибка: '+error.message);return}const link=new URL(location.href);link.search='';link.searchParams.set('access',data);$('result').replaceChildren(document.createTextNode('Ссылка: '));const a=document.createElement('a');a.href=link.toString();a.textContent='Открыть кабинет Test';a.target='_blank';a.rel='noopener noreferrer';$('result').append(a)};
 async function loadStudent(){if(!token)return;$('teacher').hidden=true;$('student').hidden=false;const {data,error}=await client.rpc('get_student_portal_by_token',{p_access_token:token});if(error||!data){message('studentstatus',error?'Ошибка: '+error.message:'Доступ не найден. Проверьте токен.');return}message('studentstatus','Доступ подтверждён');const st=data.student||{};const lessons=Array.isArray(data.lessons)?data.lessons:[];const payments=Array.isArray(data.payments)?data.payments:[];message('studentdata','Ученик: '+(st.name||'—')+' · Занятий: '+lessons.length+' · Платежей: '+payments.length)}
-if(token)loadStudent();else session();
+if(token)loadStudent();else {session();mountCaptcha()}
 </script></body></html>
